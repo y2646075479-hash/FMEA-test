@@ -1,0 +1,587 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>FMEA基础数据库</title>
+  <style>
+    :root{
+      --bg:#f5f7fb;
+      --card:#fff;
+      --text:#1f2329;
+      --muted:#667085;
+      --primary:#1677ff;
+      --border:#e5e7eb;
+      --chip:#eef4ff;
+      --good:#16a34a;
+    }
+    html,body{height:100%}
+    body{
+      margin:0; background:var(--bg); color:var(--text);
+      font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",Arial,sans-serif;
+    }
+
+    /* 页面骨架 */
+    .page{padding:12px 16px}
+    .toolbar{
+      display:flex; gap:8px; align-items:center; flex-wrap:wrap;
+      background:var(--card); border:1px solid var(--border);
+      padding:12px; border-radius:10px;
+    }
+    .title{font-size:20px; font-weight:700; margin-right:auto}
+    .input{
+      display:flex; align-items:center; gap:8px;
+      border:1px solid var(--border); border-radius:10px; padding:8px 12px;
+      background:#fff; min-width:280px;
+    }
+    .input input{
+      border:none; outline:none; width:240px; font-size:14px;
+    }
+    .btn{
+      border:1px solid var(--border); background:#fff; color:#222;
+      padding:9px 12px; border-radius:10px; cursor:pointer;
+      transition:.12s ease; user-select:none; font-size:13px;
+    }
+    .btn:hover{transform:translateY(-1px); box-shadow:0 2px 10px rgba(0,0,0,.08)}
+    .btn.primary{background:var(--primary); color:#fff; border-color:var(--primary)}
+    .btn:disabled{opacity:.6; cursor:not-allowed; transform:none; box-shadow:none}
+
+    /* 加载条 */
+    .loading{
+      display:none; margin:10px 0;
+      color:#4b5563; font-size:13px;
+    }
+    .loading.on{display:flex; align-items:center; gap:10px}
+    .spinner{width:16px; height:16px; border:2px solid #e5e7eb; border-top-color:var(--primary); border-radius:50%; animation:spin 1s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    /* 卡片容器 */
+    .card{
+      background:var(--card); border:1px solid var(--border);
+      border-radius:12px; padding:0; overflow:hidden;
+    }
+    .card .head{
+      padding:12px 14px; border-bottom:1px solid var(--border);
+      display:flex; align-items:center; gap:8px;
+    }
+    .tag{background:var(--chip); color:#2b59ff; padding:1px 8px; border-radius:20px; font-size:12px}
+
+    /* 表格区：只允许上下滚动，左右固定 */
+    .table-wrap{
+      height:calc(100vh - 260px);
+      overflow-y:auto; overflow-x:hidden;
+      border-top:1px solid var(--border);
+    }
+    table{width:100%; border-collapse:collapse}
+    thead th{
+      position:sticky; top:0; z-index:1;
+      background:#fafbff; border-bottom:1px solid var(--border);
+      font-weight:700; color:#344054;
+      padding:10px 12px; white-space:nowrap;
+    }
+    tbody td{
+      border-bottom:1px solid var(--border);
+      padding:10px 12px; vertical-align:top;
+    }
+    tbody tr:hover{background:#fafcff}
+    .wrap{white-space:normal; word-break:break-all}
+    .num{ text-align:right }
+
+    /* 相关资料 · 分页（仅此卡片） */
+    #docPager{display:flex;justify-content:space-between;align-items:center;padding:0 10px 12px}
+    #docPager .info{color:#98a2b3;font-size:12px}
+    #docPager .pager{display:flex;gap:8px}
+    #docPager .pager-btn{border:1px solid var(--border);background:#fff;border-radius:10px;padding:6px 10px;cursor:pointer}
+    #docPager .pager-btn:disabled{opacity:.5;cursor:not-allowed}
+    /* === 相关资料 · SERP 列表（域名 + 标题 + 摘要 + 胶囊元信息） === */
+    #docsBody.serp-list { display:block; padding:0 10px 12px; }
+    .serp-item{ padding:14px 12px; border:1px solid var(--border); border-radius:12px; margin:10px 0; background:#fff; }
+    .serp-title{ font-weight:700; font-size:16px; color:#1d4ed8; text-decoration:none; }
+    .serp-title:hover{ text-decoration:underline; }
+    .serp-desc{ margin-top:6px; font-size:14px; color:#111827; line-height:1.6;
+      display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; }
+    .serp-meta{ margin-top:6px; font-size:12px; color:#64748b; display:flex; gap:8px; flex-wrap:wrap; }
+    .serp-meta span{ background:#f3f4f6; border:1px solid var(--border); padding:2px 6px; border-radius:999px; }
+
+    /* favicon 行 */
+    .serp-hostline{display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:12px;color:#6b7280}
+    .serp-ico{width:16px;height:16px;border-radius:4px;background:#e5e7eb;display:inline-flex;align-items:center;justify-content:center;overflow:hidden;flex:0 0 16px}
+    .serp-ico img{width:100%;height:100%;object-fit:cover;display:block}
+    .serp-ico .fallback{font-size:10px;line-height:1;font-weight:700;color:#111827;display:none}
+
+  </style>
+</head>
+
+<body>
+  <div class="page">
+    <!-- 顶部工具条 -->
+    <div class="toolbar">
+      <div class="title">FMEA基础数据库<span id="countNote" class="tag" style="margin-left:8px;">共 0 条数据</span></div>
+
+      <div class="input">
+        <span style="color:#98a2b3">🔍</span>
+        <!-- 不设置默认值；placeholder 提示但不自动填 -->
+        <input id="kw" type="text" placeholder="请输入风电部件（如：齿轮箱、主轴、叶片…）" />
+      </div>
+
+      <button id="btnGen" class="btn primary">搜索</button>
+      <button id="btnSort" class="btn">按 RPN 排序</button>
+      <button id="btnCsv"  class="btn">导出 CSV</button>
+      <button id="btnPrint" class="btn">打印标准</button>
+    </div>
+
+    <!-- 正在生成提示 -->
+    <div id="loading" class="loading">
+      <div class="spinner"></div>
+      <div id="loadingText">正在生成 FMEA & 联网资料…</div>
+    </div>
+
+    <!-- FMEA 表格卡片 -->
+    <div class="card">
+      <div class="head">S：严重度 (1-10)、O：发生度 (1-10)、D：探测度 (1-10)，RPN = S×O×D</div>
+      <div class="table-wrap">
+        <table id="fmea">
+          <thead>
+          <tr>
+            <th>序号</th>
+            <th>项目</th>
+            <th>潜在失效模式</th>
+            <th>潜在失效后果</th>
+            <th>S</th>
+            <th>潜在失效机理</th>
+            <th>O</th>
+            <th>现有控制方法</th>
+            <th>现有探测方法</th>
+            <th>D</th>
+            <th>风险序数</th>
+            <th>建议措施</th>
+            <th>S_new</th>
+            <th>O_new</th>
+            <th>D_new</th>
+          </tr>
+          </thead>
+          <tbody>
+          <!-- 初始为空；始终显示表头 -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 相关资料卡片：放在表格“下面” -->
+    <div class="card docs" id="docsCard">
+      <div class="head">
+        <div>相关资料 <span id="docCount" class="count">(0 条)</span></div>
+        <div id="docSource" class="tag" style="margin-left:6px; display:none"></div>
+      </div>
+      <div class="body" id="docsBody">
+        <!-- 文档卡片渲染在此；只有标题链接，不再显示“打开/复制”按钮 -->
+      </div>
+        <!-- 在这里粘贴下面这段分页条 -->
+        <div id="docPager">
+          <div id="docPagerInfo" class="info">—</div>
+          <div class="pager">
+            <button id="docPrev" class="pager-btn" disabled>上一页</button>
+            <button id="docNext" class="pager-btn" disabled>下一页</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+ <script>
+  // ---------- 基础工具 ----------
+  const $ = sel => document.querySelector(sel);
+  const esc = s => String(s ?? '').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+
+  // 取嵌套字段：支持 "a.b.c"，支持数组/对象 => 文本化
+  function get(obj, path) {
+    if (!obj || !path) return undefined;
+    const segs = path.split('.');
+    let cur = obj;
+    for (const k of segs) {
+      if (cur == null) return undefined;
+      cur = cur[k];
+    }
+    // 如果是数组，拼成“；”
+    if (Array.isArray(cur)) {
+      return cur.map(x => typeof x === 'string' ? x : JSON.stringify(x)).join('；');
+    }
+    // 如果是对象，取可读键值（避免 [object Object]）
+    if (cur && typeof cur === 'object') {
+      // 常见结构：{ prevention:[...], detection:[...] }
+      if (cur.prevention || cur.detection) {
+        const p = Array.isArray(cur.prevention) ? cur.prevention.join('；') : (cur.prevention ?? '');
+        const d = Array.isArray(cur.detection) ? cur.detection.join('；') : (cur.detection ?? '');
+        return [p,d].filter(Boolean).join('；');
+      }
+      return Object.values(cur).map(v => typeof v === 'string' ? v : JSON.stringify(v)).join('；');
+    }
+    return cur;
+  }
+
+  // 在多组 key/路径中择优取文本
+  function pickText(obj, keys, def = '') {
+    for (const k of keys) {
+      const v = k.includes('.') ? get(obj, k) : obj?.[k];
+      if (v !== undefined && v !== null && String(v).trim() !== '') {
+        return String(v);
+      }
+    }
+    return def;
+  }
+
+  // 中文数字（〇一二三四五六七八九十）→ 0..10
+  function cn2num(s) {
+    const map = {'〇':0,'零':0,'一':1,'二':2,'两':2,'三':3,'四':4,'五':5,'六':6,'七':7,'八':8,'九':9,'十':10};
+    if (!s) return NaN;
+    // 处理“十”“十一”“二十”“二十五”
+    if (/十/.test(s)) {
+      const [a,b] = s.split('十');
+      const tens = a ? map[a] : 1;
+      const ones = b ? map[b] : 0;
+      return tens*10 + ones;
+    }
+    let n = 0;
+    for (const ch of s) {
+      if (map.hasOwnProperty(ch)) n = n*10 + map[ch];
+      else return NaN;
+    }
+    return Number.isFinite(n) ? n : NaN;
+  }
+
+  // 智能数字解析：从“6（越小越好）/6分/6/10/⑥/中文数字”等提取 0–10
+  function pickNumSmart(obj, keys, def = 0) {
+    const raw = pickText(obj, keys, '');
+    if (raw === '') return def;
+    // 1) 先找阿拉伯数字
+    const m = String(raw).match(/\d+/);
+    if (m) {
+      const n = parseInt(m[0], 10);
+      return Number.isFinite(n) ? Math.max(0, Math.min(999, n)) : def;
+    }
+    // 2) 尝试中文数字
+    const cn = String(raw).replace(/[^\u4e00-\u9fa5]/g,''); // 仅中文
+    const n2 = cn2num(cn);
+    if (Number.isFinite(n2)) return Math.max(0, Math.min(999, n2));
+    return def;
+  }
+
+  // 字段映射（更全面）
+  const F = {
+    project: ['project','项目','部件','子系统','item'],
+    failure_mode: ['failure_mode','潜在失效模式','失效模式','失效现象'],
+    effects: ['effects','潜在失效后果','后果','影响','影响后果'],
+    severity: ['severity','严重度','S','严重性'],
+
+    mechanism: ['mechanism','潜在失效机理','机理','原因','失效原因','成因','causes','cause'],
+
+    occurrence: ['occurrence','发生度','O','发生概率','出现概率','频度'],
+
+    // 现有控制：支持对象/数组
+    current_controls: [
+      'current_controls','现有控制方法','控制方法','控制','现有预防','预防措施','controls'
+    ],
+
+    // 探测方法：常在 current_controls.detection 里
+    detection_method: [
+      'detection_method','现有探测方法','检测方法','监测方法','检测手段','探测手段',
+      '现有检测','检测','current_controls.detection','controls.detection'
+    ],
+
+    detection_score: ['detection_score','探测度','D','检测难度'],
+
+    rpn: ['rpn','RPN','风险序数','风险优先级数','风险优先数','风险优先级'],
+
+    recommendation: [
+      'recommendation','recommendations','建议措施','改进措施','改善措施','改进建议',
+      '推荐措施','措施建议','纠正措施','countermeasures','mitigation','actions','recommended_actions'
+    ],
+
+    severity_new: ['severity_new','S_new','严重度_new','新严重度'],
+    occurrence_new: ['occurrence_new','O_new','发生度_new','新发生度'],
+    detection_new: ['detection_new','D_new','探测度_new','新探测度']
+  };
+
+  // 归一化一条记录：补全/纠偏
+  function normalizeRow(row) {
+    const obj = {...row};
+
+    // 文本类
+    obj.project            = pickText(obj, F.project);
+    obj.failure_mode       = pickText(obj, F.failure_mode);
+    obj.effects            = pickText(obj, F.effects);
+    obj.mechanism          = pickText(obj, F.mechanism);
+
+    // 方法类（可能来自数组/对象/嵌套）
+    // 控制方法
+    const ctrlTxt = pickText(obj, F.current_controls);
+    obj.current_controls   = ctrlTxt;
+
+    // 探测方法：优先取 detection_method；如为空，再从 current_controls.detection 提取
+    let detM = pickText(obj, F.detection_method);
+    if (!detM && obj.current_controls) {
+      // 从控制文本里简单抽取“检测/探测/监测”关键词片段
+      const m = String(obj.current_controls).match(/((?:检测|探测|监测)[^；。]*)/g);
+      if (m && m.length) detM = m.join('；');
+    }
+    obj.detection_method = detM;
+
+    // 数值类：智能解析
+    obj.severity          = pickNumSmart(obj, F.severity, 0);
+    obj.occurrence        = pickNumSmart(obj, F.occurrence, 0);
+    obj.detection_score   = pickNumSmart(obj, F.detection_score, 0);
+
+    // *_new 缺省时回填旧值
+    obj.severity_new      = pickNumSmart(obj, F.severity_new, obj.severity);
+    obj.occurrence_new    = pickNumSmart(obj, F.occurrence_new, obj.occurrence);
+    obj.detection_new     = pickNumSmart(obj, F.detection_new, obj.detection_score);
+
+    // RPN：若无或为 0，自动补全
+    const rpnRaw          = pickNumSmart(obj, F.rpn, 0);
+    obj.rpn               = (rpnRaw && rpnRaw>0)
+                              ? rpnRaw
+                              : (obj.severity||0) * (obj.occurrence||0) * (obj.detection_score||0);
+
+    // 建议措施
+    obj.recommendation    = pickText(obj, F.recommendation);
+
+    return obj;
+  }
+
+  function normalizeItems(list) {
+    if (!Array.isArray(list)) return [];
+    return list.map(normalizeRow);
+  }
+
+  // ---------- UI ----------
+  const btnGen = $('#btnGen');
+  const btnSort = $('#btnSort');
+  const btnCsv  = $('#btnCsv');
+  const btnPrint= $('#btnPrint');
+  const inputKw = $('#kw');
+  const loading = $('#loading');
+  const loadingText = $('#loadingText');
+  const countNote = $('#countNote');
+  const docsBody  = $('#docsBody');
+  const docCount  = $('#docCount');
+  const docSource = $('#docSource');
+
+  let tableData = [];
+  let sortAsc = false;
+
+  function showLoading(on, text='正在生成 FMEA & 联网资料…'){
+    loading.classList.toggle('on', !!on);
+    loadingText.textContent = text;
+    btnGen.disabled = !!on;
+    inputKw.disabled = !!on;
+  }
+
+  function renderTable(items=[]) {
+    tableData = Array.isArray(items) ? items : [];
+    const tbody = document.querySelector('#fmea tbody');
+    tbody.innerHTML = '';
+
+    if (tableData.length === 0) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td colspan="15" style="text-align:center;color:#888;">未生成到 FMEA 数据</td>`;
+      tbody.appendChild(tr);
+      countNote.textContent = '共 0 条数据';
+      return;
+    }
+    countNote.textContent = `共 ${tableData.length} 条数据`;
+
+    tableData.forEach((it, idx)=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${idx+1}</td>
+        <td class="wrap">${esc(it.project)}</td>
+        <td class="wrap">${esc(it.failure_mode)}</td>
+        <td class="wrap">${esc(it.effects)}</td>
+        <td class="num">${it.severity}</td>
+        <td class="wrap">${esc(it.mechanism)}</td>
+        <td class="num">${it.occurrence}</td>
+        <td class="wrap">${esc(it.current_controls)}</td>
+        <td class="wrap">${esc(it.detection_method)}</td>
+        <td class="num">${it.detection_score}</td>
+        <td class="num">${it.rpn}</td>
+        <td class="wrap">${esc(it.recommendation)}</td>
+        <td class="num">${it.severity_new}</td>
+        <td class="num">${it.occurrence_new}</td>
+        <td class="num">${it.detection_new}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function renderDocs(list=[], source=''){
+    docsBody.innerHTML = '';
+    docCount.textContent = `(${(Array.isArray(list)?list.length:0)} 条)`;
+    if(source){ docSource.style.display='inline-block'; docSource.textContent = source; }
+    else{ docSource.style.display='none'; }
+
+    if(!Array.isArray(list) || list.length === 0){
+      docsBody.innerHTML = `<div style="color:#98a2b3">没有匹配的资料</div>`;
+      return;
+    }
+    list.forEach(it=>{
+      const a = document.createElement('a');
+      a.href = it.url; a.target="_blank"; a.rel="noopener noreferrer";
+      a.textContent = it.title || it.url;
+
+      const card = document.createElement('div');
+      card.className = 'doc';
+      card.appendChild(a);
+      docsBody.appendChild(card);
+    });
+  }
+
+  function sortByRPN(){
+    if(!Array.isArray(tableData) || tableData.length<2) return;
+    sortAsc = !sortAsc;
+    tableData.sort((a,b)=> (sortAsc ? (a.rpn - b.rpn) : (b.rpn - a.rpn)));
+    renderTable(tableData);
+  }
+
+  function exportCSV(){
+    if(!Array.isArray(tableData) || tableData.length === 0){
+      alert('没有可导出的数据'); return;
+    }
+    const header = ['序号','项目','潜在失效模式','潜在失效后果','严重度','潜在失效机理','发生度','现有控制方法','现有探测方法','探测度','风险序数','建议措施','严重度_new','发生度_new','探测度_new'];
+    const rows = tableData.map((it, i)=>[
+      i+1, it.project, it.failure_mode, it.effects, it.severity, it.mechanism,
+      it.occurrence, it.current_controls, it.detection_method, it.detection_score,
+      it.rpn, it.recommendation, it.severity_new, it.occurrence_new, it.detection_new
+    ]);
+    const csv = [header, ...rows]
+      .map(r=>r.map(x=>`"${String(x??'').replace(/"/g,'""')}"`).join(','))
+      .join('\r\n');
+    const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `FMEA_${(inputKw.value||'未命名')}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+  }
+
+  function printStd(){ window.print(); }
+
+  // ---------- 搜索主流程 ----------
+  async function onSearch(){
+    const kw = inputKw.value.trim();
+    if(!kw){ alert('请输入要分析的风电部件'); inputKw.focus(); return; }
+
+    showLoading(true);
+    try{
+      // 1) 生成 FMEA 数据
+      const r1 = await fetch('http://127.0.0.1:3001/fmea/generate', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ part: kw, count: 10 })
+      });
+      const j1 = await r1.json();
+      const items = normalizeItems(j1?.items || []);
+      renderTable(items);
+
+      // 2) 相关资料（改用 /api/refs，支持分页）
+    await loadRefs(`风电${kw} 失效 模式`.replace(/\s+/g, ''), 1);
+    }catch(err){
+      alert('生成或搜索失败：' + (err?.message || err));
+    }finally{
+      showLoading(false);
+    }
+  }
+
+  // 事件绑定
+  $('#btnGen').addEventListener('click', onSearch);
+  $('#kw').addEventListener('keydown', e=>{ if(e.key==='Enter') onSearch(); });
+  $('#btnSort').addEventListener('click', sortByRPN);
+  $('#btnCsv').addEventListener('click', exportCSV);
+  $('#btnPrint').addEventListener('click', printStd);
+
+  // 初始
+  renderDocs([]);
+  // === 相关资料 · 联网+分页（保持原有小卡片样式） ===
+    const REFS_PAGE_SIZE = 9;      // 每页条数；你的 3 列网格 × 3 行刚好
+    let refsState = { q:'', page:1 };
+
+    async function loadRefs(q, page = 1){
+      refsState.q = q; refsState.page = page;
+
+      // UI：来源标签 + 分页提示
+      docSource.style.display = 'inline-block';
+      docSource.textContent = 'serpapi/baidu';
+      $('#docPagerInfo').textContent = '加载中…';
+      $('#docPrev').disabled = true; $('#docNext').disabled = true;
+
+      try{
+        // 如果不是从 3001 打开的页面，就把 API 发到 3001
+        const API_BASE = (location.protocol === 'file:' || location.port !== '3001')
+          ? 'http://127.0.0.1:3001'
+          : '';
+        const url = `${API_BASE}/api/refs?q=${encodeURIComponent(q)}&engine=baidu&page=${page}&page_size=${REFS_PAGE_SIZE}`;
+        const data = await fetch(url).then(r=>r.json());
+
+        const items = Array.isArray(data.items) ? data.items : [];
+        renderDocsSerp(items, 'serpapi/baidu');                   // 复用你原来的渲染（小卡片样式）
+        $('#docPagerInfo').textContent = `第 ${page} 页 · 本页 ${items.length} 条`;
+
+        // 分页按钮
+        const prevToken = data.prev_page_token, nextToken = data.next_page_token;
+        const bind = (el, enabled, toPage) => {
+          el.disabled = !enabled;
+          el.onclick = enabled ? () => loadRefs(q, toPage) : null;
+        };
+        bind($('#docPrev'), !!prevToken, parseInt(prevToken||page-1,10));
+        bind($('#docNext'), !!nextToken, parseInt(nextToken||page+1,10));
+
+      }catch(e){
+        docsBody.innerHTML = `<div style="color:#e11d48">参考资料加载失败：${esc(e.message||e)}</div>`;
+        $('#docPagerInfo').textContent = '—';
+      }
+    }
+    // === 相关资料（SERP 展示：域名 + favicon + 标题 + 两行摘要 + 元信息） ===
+    function renderDocsSerp(list, source){
+      const el = $('#docsBody');
+      el.classList.add('serp-list');   // 切换为 SERP 容器
+      const html = (list || []).map(it => {
+        const host = esc(it.host || '');
+        const title = esc(it.title || it.url || '');
+        const url = esc(it.url || '#');
+        const ico = esc(it.favicon || '');
+        const initial = host ? host[0].toUpperCase() : '?';
+
+        // 两行摘要 + 关键词高亮（用 refsState.q 里的词）
+        const desc = highlightTerms(it.snippet || '', (window.refsState && refsState.q) || '');
+        const date = it.published_at ? `<span>${esc(it.published_at)}</span>` : '';
+        const file = it.filetype ? `<span>${esc(String(it.filetype).toUpperCase())}</span>` : '';
+        const tag  = it.source_tag ? `<span>${esc(it.source_tag)}</span>` : '';
+
+        return `
+          <article class="serp-item">
+            <div class="serp-hostline">
+              <span class="serp-ico">
+                <img src="${ico}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-block'">
+                <span class="fallback">${initial}</span>
+              </span>
+              ${host}
+            </div>
+            <a class="serp-title" href="${url}" target="_blank" rel="noopener">${title}</a>
+            ${desc ? `<p class="serp-desc">${desc}</p>` : ``}
+            <div class="serp-meta">${date}${file}${tag}</div>
+          </article>`;
+      }).join('');
+      el.innerHTML = html || `<div class="serp-item" style="color:#6b7280">（未找到相关资料）</div>`;
+      if (window.docSource){ docSource.style.display='inline-block'; docSource.textContent = source || 'serpapi/baidu'; }
+    }
+
+    // 关键词高亮工具（若已存在同名函数，可跳过）
+    function highlightTerms(text, q){
+      let out = esc(text || '');
+      const terms = String(q || '').split(/\s+/).filter(Boolean).slice(0,6);
+      for(const t of terms){
+        const re = new RegExp(`(${t.replace(/[.*+?^${}()|[\\]\\\\]/g,'\\\\$&')})`,'gi');
+        out = out.replace(re,'<mark>$1</mark>');
+      }
+      return out;
+    }
+</script>
+</body>
+</html>
