@@ -342,6 +342,7 @@ app.get('/api/refs', async (req, res) => {
     const j = await r.json();
 
     const list = Array.isArray(j.organic_results) ? j.organic_results : [];
+    const pagination = j.serpapi_pagination || {};
 
     const getFileType = (u) => {
       const m = (u || '').toLowerCase().match(/\.(pdf|docx?|pptx?|xlsx?)($|\?|#)/);
@@ -420,11 +421,36 @@ app.get('/api/refs', async (req, res) => {
     // 把无效链接过滤掉，再进入分页
     dedup = dedup.filter(x => !isBadUrl(x.url));
 
+    const hasNextFromApi = (() => {
+      if (!pagination || typeof pagination !== 'object') return false;
+
+      const nextFields = [
+        pagination.next_page_token,
+        pagination.next_page_link,
+        pagination.next_page_url,
+        pagination.next,
+        pagination.next_link
+      ];
+      if (nextFields.some(v => typeof v === 'string' ? v.trim() !== '' : Boolean(v))) return true;
+
+      if (pagination.other_pages && typeof pagination.other_pages === 'object') {
+        const numericKeys = Object.keys(pagination.other_pages)
+          .map(k => Number(k))
+          .filter(n => Number.isFinite(n));
+        if (numericKeys.length > 0 && page < Math.max(...numericKeys)) {
+          return true;
+        }
+      }
+      return false;
+    })();
+
+    const hasNext = hasNextFromApi || list.length >= pageSize;
+
     res.json({
       q, engine,
       items: dedup.slice(0, pageSize),
       prev_page_token: page > 1 ? String(page - 1) : null,
-      next_page_token: dedup.length >= pageSize ? String(page + 1) : null
+      next_page_token: hasNext ? String(page + 1) : null
     });
   } catch (e) {
     res.status(500).json({ error: 'refs_failed', detail: e.message });
