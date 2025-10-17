@@ -125,6 +125,7 @@
       </div>
 
       <button id="btnGen" class="btn primary">搜索</button>
+      <button id="btnRegen" class="btn">再生成 10 条</button>
       <button id="btnSort" class="btn">按 RPN 排序</button>
       <button id="btnCsv"  class="btn">导出 CSV</button>
       <button id="btnPrint" class="btn">打印标准</button>
@@ -355,6 +356,7 @@
 
   // ---------- UI ----------
   const btnGen = $('#btnGen');
+  const btnRegen = $('#btnRegen');
   const btnSort = $('#btnSort');
   const btnCsv  = $('#btnCsv');
   const btnPrint= $('#btnPrint');
@@ -368,11 +370,13 @@
 
   let tableData = [];
   let sortAsc = false;
+  let lastKeyword = '';
 
   function showLoading(on, text='正在生成 FMEA & 联网资料…'){
     loading.classList.toggle('on', !!on);
     loadingText.textContent = text;
     btnGen.disabled = !!on;
+    if (btnRegen) btnRegen.disabled = !!on;
     inputKw.disabled = !!on;
   }
 
@@ -479,6 +483,7 @@
       const j1 = await r1.json();
       const items = normalizeItems(j1?.items || []);
       renderTable(items);
+      if(items.length){ lastKeyword = kw; }
 
       // 2) 相关资料（改用 /api/refs，支持分页）
     await loadRefs(`风电${kw} 失效 模式`.replace(/\s+/g, ''), 1);
@@ -489,8 +494,37 @@
     }
   }
 
+  async function onRegenerate(){
+    if(!Array.isArray(tableData) || tableData.length === 0){
+      alert('请先点击"搜索"生成初始 FMEA 数据'); inputKw.focus(); return;
+    }
+    const kw = lastKeyword || inputKw.value.trim();
+    if(!kw){
+      alert('当前风电部件未知，请重新搜索后再试'); inputKw.focus(); return;
+    }
+
+    showLoading(true, '正在追加 FMEA 数据…');
+    try{
+      const r = await fetch('http://127.0.0.1:3001/fmea/generate', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ part: kw, count: 10 })
+      });
+      const j = await r.json();
+      const moreItems = normalizeItems(j?.items || []);
+      if(moreItems.length === 0){
+        alert('未获取到新的 FMEA 数据'); return;
+      }
+      renderTable([...tableData, ...moreItems]);
+    }catch(err){
+      alert('追加生成失败：' + (err?.message || err));
+    }finally{
+      showLoading(false);
+    }
+  }
+
   // 事件绑定
-  $('#btnGen').addEventListener('click', onSearch);
+  btnGen.addEventListener('click', onSearch);
+  if(btnRegen) btnRegen.addEventListener('click', onRegenerate);
   $('#kw').addEventListener('keydown', e=>{ if(e.key==='Enter') onSearch(); });
   $('#btnSort').addEventListener('click', sortByRPN);
   $('#btnCsv').addEventListener('click', exportCSV);
