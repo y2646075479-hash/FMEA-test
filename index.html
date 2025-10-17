@@ -537,8 +537,19 @@
         $('#docPagerInfo').textContent = '—';
       }
     }
+    // 过滤掉无效的 URL，避免渲染出占位链接
+    function isValidHttpUrl(s){
+      try {
+        const u = new URL(s);
+        if (!['http:', 'https:'].includes(u.protocol)) return false;
+        if (u.hostname.toLowerCase().startsWith('nourl.') && u.hostname.endsWith('.baidu.com')) return false;
+        return true;
+      } catch { return false; }
+    }
+
     // === 相关资料（SERP 展示：域名 + favicon + 标题 + 两行摘要 + 元信息） ===
     function renderDocsSerp(list, source){
+      list = (Array.isArray(list) ? list : []).filter(x => isValidHttpUrl(x.url));
       const el = $('#docsBody');
       el.classList.add('serp-list');   // 切换为 SERP 容器
       const html = (list || []).map(it => {

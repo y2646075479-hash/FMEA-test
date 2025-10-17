@@ -391,11 +391,34 @@ app.get('/api/refs', async (req, res) => {
 
     // 去重（规范化 URL + 标题）
     const seen = new Set();
-    const dedup = [];
+    let dedup = [];
     for (const x of items) {
       const key = (x.url || '').replace(/[?#].*$/, '') + '|' + (x.title || '');
       if (!seen.has(key)) { seen.add(key); dedup.push(x); }
     }
+
+    // 已知无效的占位域名名单，直接剔除
+    const BAD_HOSTS = new Set([
+      'nourl.ubs.baidu.com',       // 百度占位域名（必然无效）
+    ]);
+
+    // 判断 URL 是否明显无效（非法 Scheme、解析失败等）
+    function isBadUrl(u) {
+      if (!u || typeof u !== 'string') return true;
+      const s = u.trim();
+      // 明显无效的 Scheme
+      if (/^(javascript:|data:|about:)/i.test(s)) return true;
+      try {
+        const host = new URL(s).host.toLowerCase();
+        if (!host) return true;
+        if (BAD_HOSTS.has(host)) return true;
+        if (host.startsWith('nourl.') && host.endsWith('.baidu.com')) return true; // 兜底
+        return false;
+      } catch { return true; } // 解析失败也当无效
+    }
+
+    // 把无效链接过滤掉，再进入分页
+    dedup = dedup.filter(x => !isBadUrl(x.url));
 
     res.json({
       q, engine,
