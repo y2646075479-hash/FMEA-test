@@ -23,7 +23,12 @@
     }
 
     /* 页面骨架 */
-    .page{padding:12px 16px}
+    .page{
+      padding:12px 16px;
+      display:flex;
+      flex-direction:column;
+      gap:18px;
+    }
     .toolbar{
       display:flex; gap:8px; align-items:center; flex-wrap:wrap;
       background:var(--card); border:1px solid var(--border);
@@ -58,12 +63,27 @@
 
     /* 卡片容器 */
     .card{
-      background:var(--card); border:1px solid var(--border);
+      background:var(--card); border:1px solid rgba(15,23,42,.08);
       border-radius:12px; padding:0; overflow:hidden;
+      box-shadow:0 18px 40px -24px rgba(15,23,42,.35);
     }
     .card .head{
-      padding:12px 14px; border-bottom:1px solid var(--border);
+      padding:12px 14px; border-bottom:1px solid rgba(15,23,42,.08);
       display:flex; align-items:center; gap:8px;
+    }
+    .card + .card{margin-top:0}
+    .card.docs{
+      background:linear-gradient(180deg,#fff 0,#f7f9ff 100%);
+      padding:16px 0 20px;
+    }
+    .card.docs .head{gap:12px; font-size:15px}
+    .card.docs .body{padding:0 18px 10px}
+    .card.docs .divider{
+      margin:0 18px 0;
+      height:1px; background:rgba(15,23,42,.08);
+    }
+    .card.docs #docPager{
+      padding:0 18px 12px;
     }
     .tag{background:var(--chip); color:#2b59ff; padding:1px 8px; border-radius:20px; font-size:12px}
 
@@ -175,6 +195,7 @@
         <div>相关资料 <span id="docCount" class="count">(0 条)</span></div>
         <div id="docSource" class="tag" style="margin-left:6px; display:none"></div>
       </div>
+      <div class="divider"></div>
       <div class="body" id="docsBody">
         <!-- 文档卡片渲染在此；只有标题链接，不再显示“打开/复制”按钮 -->
       </div>
