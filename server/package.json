@@ -4,7 +4,9 @@
   "description": "FMEA backend",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test:fmea": "node scripts/test-fmea.js",
+    "test:refs": "node scripts/test-refs.js"
   },
   "license": "ISC",
   "dependencies": {
