@@ -1,4 +1,5 @@
 @echo off
+REM 本脚本负责一键启动后端服务并在就绪后打开前端页面
 chcp 65001 >nul
 setlocal ENABLEDELAYEDEXPANSION
 
