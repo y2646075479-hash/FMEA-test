@@ -12,11 +12,98 @@ function buildUserPrompt(part, count = 10) {
 }
 
 function parseJSONSafe(text) {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return null;
+  // 仅当输入为字符串时才尝试解析，避免 `JSON.parse(null)` 等直接抛错
+  if (typeof text !== 'string') return null;
+
+  // 统一的 JSON.parse 包装：失败时返回 null 而不是抛出异常
+  const attempt = (value) => {
+    if (!value || typeof value !== 'string') return null;
+    try {
+      return JSON.parse(value);
+    } catch {
+      return null;
+    }
+  };
+
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+
+  // 第一种尝试：直接解析整体响应
+  let parsed = attempt(trimmed);
+  if (parsed !== null) return parsed;
+
+  // 第二种尝试：解析 ```json fenced code block``` 中的主体内容
+  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)```$/i);
+  if (fenced) {
+    parsed = attempt(fenced[1].trim());
+    if (parsed !== null) return parsed;
   }
+
+  // 第三种尝试：从文本中提取首个平衡的 JSON 片段再解析
+  const extracted = extractFirstJSONBlock(trimmed);
+  if (extracted) {
+    parsed = attempt(extracted);
+    if (parsed !== null) return parsed;
+  }
+
+  // 所有策略均失败时返回 null 交由上游处理
+  return null;
+}
+
+function extractFirstJSONBlock(text) {
+  // `start` 记录首个 `{`/`[` 的位置，`depth` 跟踪嵌套层级
+  let start = -1;
+  let depth = 0;
+  let inString = false;
+  let stringChar = null;
+
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    const prev = i > 0 ? text[i - 1] : '';
+
+    // 进入 JSON 的起始：锁定起点并初始化状态
+    if (start === -1) {
+      if (ch === '{' || ch === '[') {
+        start = i;
+        depth = 1;
+        inString = false;
+        stringChar = null;
+      }
+      continue;
+    }
+
+    // 字符串内部仅关注转义结束符，不处理括号
+    if (inString) {
+      if (ch === stringChar && prev !== '\\') {
+        inString = false;
+      }
+      continue;
+    }
+
+    // 遇到成对引号进入字符串模式，直到匹配到同类引号
+    if (ch === '"' || ch === "'") {
+      inString = true;
+      stringChar = ch;
+      continue;
+    }
+
+    // 统计嵌套深度，支持数组/对象混合嵌套
+    if (ch === '{' || ch === '[') {
+      depth += 1;
+      continue;
+    }
+
+    if (ch === '}' || ch === ']') {
+      depth -= 1;
+      if (depth === 0) {
+        // 找到闭合位置，返回完整片段
+        return text.slice(start, i + 1);
+      }
+    }
+  }
+
+  // 未找到平衡片段时返回 null，交给上游继续兜底
+  return null;
 }
 
 function validateFMEA_v2(payload) {
